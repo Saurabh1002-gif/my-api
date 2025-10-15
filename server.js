@@ -1,16 +1,17 @@
+require('dotenv').config(); // <== Load .env at the top
+
 const express = require('express');
 const mongoose = require('mongoose');
 const bodyParser = require('body-parser');
 
-// === CONFIG ===
 const app = express();
-const PORT = 5000;
-const MONGO_URI = 'mongodb://localhost:27017/hardwareData'; // Change if using MongoDB Atlas
+const PORT = process.env.PORT || 5000;
+const MONGO_URI = process.env.MONGO_URI;
 
-// === MIDDLEWARE ===
+// Middleware
 app.use(bodyParser.json());
 
-// === MONGOOSE SCHEMA & MODEL ===
+// Mongoose Schema
 const dataSchema = new mongoose.Schema({
   name: { type: String, required: true },
   distance: { type: Number, required: true }, // in cm
@@ -20,14 +21,11 @@ const dataSchema = new mongoose.Schema({
 
 const Data = mongoose.model('Data', dataSchema);
 
-// === ROUTES ===
-
-// Test route
+// Routes
 app.get('/', (req, res) => {
   res.send('API is working!');
 });
 
-// Create (POST)
 app.post('/api/data', async (req, res) => {
   try {
     const { name, distance, time, date } = req.body;
@@ -45,7 +43,6 @@ app.post('/api/data', async (req, res) => {
   }
 });
 
-// Read all data (GET)
 app.get('/api/data', async (req, res) => {
   try {
     const allData = await Data.find().sort({ date: -1, time: -1 });
@@ -55,8 +52,11 @@ app.get('/api/data', async (req, res) => {
   }
 });
 
-// === DB CONNECT AND START SERVER ===
-mongoose.connect(MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
+// MongoDB Connection
+mongoose.connect(MONGO_URI, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+})
   .then(() => {
     console.log('MongoDB connected.');
     app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
