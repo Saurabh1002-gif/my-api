@@ -8,37 +8,43 @@ app.use(cors());
 app.use(bodyParser.json());
 
 // ==== CONNECT MONGODB ====
-mongoose.connect("mongodb+srv://jhunjhun2232_db_user:XPT6l47Bt8uZODpY@cluster0.wtkhwmm.mongodb.net/distance",{
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-})
-.then(() => console.log("✅ MongoDB connected"))
-.catch(err => console.error("MongoDB error:", err));
+mongoose.connect(
+  "mongodb+srv://jhunjhun2232_db_user:XPT6l47Bt8uZODpY@cluster0.wtkhwmm.mongodb.net/distance",
+  {
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+  }
+)
+  .then(() => console.log("✅ MongoDB connected"))
+  .catch(err => console.error("MongoDB error:", err));
 
 // ==== SCHEMAS ====
 const machineSchema = new mongoose.Schema({
-  machineId: { type: String, required: true, unique: true },
+  machineId: { type: String, required: true, unique: true }, // e.g. "101"
   x: Number,
   y: Number
 });
+
 const locationSchema = new mongoose.Schema({
-  employeeId: String,
+  employeeId: String, // e.g. "999"
   x: Number,
   y: Number,
   timestamp: { type: Date, default: Date.now }
 });
+
 const distanceReportSchema = new mongoose.Schema({
-  machineId: String,
-  distances: Object, // { E1: 0, E2: 0, E3: 0 }
-  timestamp: { type: Date, default: Date.now }
-});
+  name: { type: String, required: true, unique: true }, // e.g. "101999"
+  distance: Number, // in cm
+  date: String,
+  time: String
+}, { _id: false });
 
 const Machine = mongoose.model("Machine", machineSchema);
 const Location = mongoose.model("Location", locationSchema);
 const DistanceReport = mongoose.model("DistanceReport", distanceReportSchema);
 
 // ==== UTIL ====
-const calcDist = (x1, y1, x2, y2) => Math.sqrt((x1 - x2)**2 + (y1 - y2)**2);
+const calcDist = (x1, y1, x2, y2) => Math.sqrt((x1 - x2) ** 2 + (y1 - y2) ** 2);
 
 // ==== ROUTES ====
 
@@ -57,10 +63,12 @@ app.post("/api/locations", async (req, res) => {
       }
     }
 
-    // Get all machines
     const machines = await Machine.find({});
     const reportTimestamp = new Date();
-    const employeesIds = ["E1", "E2", "E3"];
+    const date = reportTimestamp.toISOString().split("T")[0];
+    const time = reportTimestamp.toTimeString().split(" ")[0];
+
+    const employeesIds = ["999", "998", "997"];
     const latestLocations = {};
 
     // Get latest location for each employee
@@ -71,41 +79,46 @@ app.post("/api/locations", async (req, res) => {
 
     // Compute distances and save reports
     for (const m of machines) {
-      const distances = {};
       for (const e of employeesIds) {
         const loc = latestLocations[e];
-        if (!loc || (reportTimestamp - loc.timestamp) > 2*60*1000) { // older than 2 min
-          distances[e] = 0;
-        } else {
-          distances[e] = Number(calcDist(m.x, m.y, loc.x, loc.y).toFixed(2));
+        let distance = 0;
+        if (loc && (reportTimestamp - loc.timestamp) <= 2 * 60 * 1000) {
+          const distMeters = calcDist(m.x, m.y, loc.x, loc.y);
+          distance = Number((distMeters * 100).toFixed(2)); // convert to cm
         }
-      }
 
-      await DistanceReport.create({
-        machineId: m.machineId,
-        distances,
-        timestamp: reportTimestamp
-      });
+        const combinedName = `${m.machineId}${e}`;
+
+        await DistanceReport.findOneAndUpdate(
+          { name: combinedName },
+          { distance, date, time },
+          { upsert: true, new: true }
+        );
+      }
     }
 
-    res.status(201).json({ message: "✅ Employee locations saved and distance reports created" });
+    res.status(201).json({ message: "✅ Employee locations saved and distance reports updated (in cm)" });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// GET latest distance reports
-app.get("/api/machines/report", async (req, res) => {
+// GET all machine-employee distances as flat object
+app.get("/api/employees/distances", async (req, res) => {
   try {
-    const latestReports = {};
+    const employeesIds = ["999", "998", "997"];
     const machines = await Machine.find({});
+    const result = {};
+
     for (const m of machines) {
-      const report = await DistanceReport.findOne({ machineId: m.machineId })
-        .sort({ timestamp: -1 })
-        .exec();
-      latestReports[m.machineId] = report || { distances: {}, timestamp: null };
+      for (const e of employeesIds) {
+        const combinedName = `${m.machineId}${e}`;
+        const report = await DistanceReport.findOne({ name: combinedName });
+        result[combinedName] = report ? report.distance : null;
+      }
     }
-    res.json(latestReports);
+
+    res.json(result); // { "101999": 500, "102999": 640.31, ... }
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -116,14 +129,14 @@ app.get("/api/machines/report", async (req, res) => {
   const count = await Machine.countDocuments();
   if (count === 0) {
     await Machine.insertMany([
-      { machineId: "M1", x: 0, y: 0 },
-      { machineId: "M2", x: 10, y: 0 },
-      { machineId: "M3", x: 5, y: 8.66 }
+      { machineId: "101", x: 0, y: 0 },
+      { machineId: "102", x: 10, y: 0 },
+      { machineId: "103", x: 5, y: 8.66 }
     ]);
-    console.log("🧩 Machines seeded");
+    console.log("🧩 Machines seeded (IDs: 101, 102, 103)");
   }
 })();
 
 // ==== START SERVER ====
-const PORT = 5000;
+const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
