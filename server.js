@@ -1,4 +1,4 @@
-require('dotenv').config(); // <== Load .env at the top
+require('dotenv').config(); // Load environment variables
 
 const express = require('express');
 const mongoose = require('mongoose');
@@ -14,9 +14,9 @@ app.use(bodyParser.json());
 // Mongoose Schema
 const dataSchema = new mongoose.Schema({
   name: { type: String, required: true },
-  distance: { type: Number, required: true }, // in cm
-  time: { type: String, required: true },     // e.g., "14:23:00"
-  date: { type: String, required: true },     // e.g., "2025-10-15"
+  distance: { type: Number, required: true },
+  time: { type: String, required: true },
+  date: { type: String, required: true },
 });
 
 const Data = mongoose.model('Data', dataSchema);
@@ -39,6 +39,7 @@ app.post('/api/data', async (req, res) => {
 
     res.status(201).json({ message: 'Data saved successfully.', data: newData });
   } catch (err) {
+    console.error(err);
     res.status(500).json({ error: 'Server error.' });
   }
 });
@@ -48,6 +49,7 @@ app.get('/api/data', async (req, res) => {
     const allData = await Data.find().sort({ date: -1, time: -1 });
     res.json(allData);
   } catch (err) {
+    console.error(err);
     res.status(500).json({ error: 'Server error.' });
   }
 });
@@ -58,7 +60,10 @@ mongoose.connect(MONGO_URI, {
   useUnifiedTopology: true,
 })
   .then(() => {
-    console.log('MongoDB connected.');
-    app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
+    console.log('✅ MongoDB connected');
+    app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
   })
-  .catch(err => console.error('MongoDB connection error:', err));
+  .catch(err => {
+    console.error('❌ MongoDB connection error:', err.message);
+    process.exit(1); // Exit on connection failure
+  });
