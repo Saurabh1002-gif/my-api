@@ -10,7 +10,7 @@ const MONGO_URI = process.env.MONGO_URI;
 // Middleware
 app.use(bodyParser.json());
 
-// ✅ Schema for storing only the distance array
+// ✅ Schema (only distances)
 const distanceSchema = new mongoose.Schema({
   distances: {
     type: [Number],
@@ -21,58 +21,62 @@ const distanceSchema = new mongoose.Schema({
 
 const DistanceArray = mongoose.model('DistanceArray', distanceSchema);
 
-// ✅ POST /api/data — Accepts an array and stores it
+// ✅ POST: Accept and store distances only
 app.post('/api/data', async (req, res) => {
   const { distances } = req.body;
 
   if (!Array.isArray(distances)) {
-    return res.status(400).json({ error: 'Request must include an array of distances.' });
+    return res.status(400).json({ error: 'Please provide an array of distances only.' });
   }
 
-  // 🖨️ Print in format: 1 = 10cm, 2 = 20cm, ...
-  distances.forEach((distance, index) => {
-    console.log(`${index + 1} = ${distance}cm`);
+  // ✅ Print like: 1 = 58cm, etc.
+  distances.forEach((distance, i) => {
+    console.log(`${i + 1} = ${distance}cm`);
   });
 
   try {
+    // Check if a document already exists
     let record = await DistanceArray.findOne();
 
     if (!record) {
+      // Create a new one
       record = new DistanceArray({ distances });
     } else {
+      // Append to existing
       record.distances.push(...distances);
     }
 
     await record.save();
-    res.status(201).json({ message: 'Distances saved successfully.' });
+    res.status(201).json({ message: 'Distances saved.' });
   } catch (err) {
-    console.error('Error saving distances:', err);
+    console.error('Save error:', err);
     res.status(500).json({ error: 'Server error.' });
   }
 });
 
-// ✅ GET /api/data/distances — Return just the distance array
+// ✅ GET: Return only the distance array
 app.get('/api/data/distances', async (req, res) => {
   try {
     const record = await DistanceArray.findOne().lean();
     if (!record) return res.json([]);
     res.json(record.distances);
   } catch (err) {
-    console.error('Error fetching distances:', err);
+    console.error('Get error:', err);
     res.status(500).json({ error: 'Server error.' });
   }
 });
 
-// ✅ MongoDB connection + server start
+// ✅ DB connect + start
 mongoose.connect(MONGO_URI, {
   useNewUrlParser: true,
   useUnifiedTopology: true
 })
-  .then(() => {
-    console.log('✅ MongoDB connected');
-    app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
-  })
-  .catch((err) => {
-    console.error('❌ MongoDB connection error:', err.message);
-    process.exit(1);
+.then(() => {
+  console.log('✅ MongoDB connected');
+  app.listen(PORT, () => {
+    console.log(`🚀 Server running on port ${PORT}`);
   });
+})
+.catch(err => {
+  console.error('❌ MongoDB connection error:', err.message);
+});
