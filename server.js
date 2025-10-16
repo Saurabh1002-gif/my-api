@@ -13,7 +13,7 @@ app.use(bodyParser.json());
 
 // Mongoose Schema
 const dataSchema = new mongoose.Schema({
-  name: { type: String, required: true },
+  name: { type: Number, required: true }, // Changed from String to Number for proper sorting
   distance: { type: Number, required: true },
   time: { type: String, required: true },
   date: { type: String, required: true },
@@ -26,11 +26,12 @@ app.get('/', (req, res) => {
   res.send('API is working!');
 });
 
+// ✅ Create new data
 app.post('/api/data', async (req, res) => {
   try {
     const { name, distance, time, date } = req.body;
 
-    if (!name || !distance || !time || !date) {
+    if (name === undefined || distance === undefined || !time || !date) {
       return res.status(400).json({ error: 'All fields are required.' });
     }
 
@@ -44,10 +45,23 @@ app.post('/api/data', async (req, res) => {
   }
 });
 
+// ✅ Get all data (full)
 app.get('/api/data', async (req, res) => {
   try {
     const allData = await Data.find().sort({ date: -1, time: -1 });
     res.json(allData);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error.' });
+  }
+});
+
+// ✅ NEW: Get only distances sorted by name (ascending)
+app.get('/api/data/distances', async (req, res) => {
+  try {
+    const data = await Data.find().sort({ name: 1 }); // Sort by device name ascending
+    const distances = data.map(entry => entry.distance); // Only distance values
+    res.json(distances); // Output: [55, 33, 87] etc.
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error.' });
@@ -65,5 +79,5 @@ mongoose.connect(MONGO_URI, {
   })
   .catch(err => {
     console.error('❌ MongoDB connection error:', err.message);
-    process.exit(1); // Exit on connection failure
+    process.exit(1);
   });
