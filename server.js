@@ -1,4 +1,4 @@
-require('dotenv').config(); // Load environment variables
+require('dotenv').config();
 
 const express = require('express');
 const mongoose = require('mongoose');
@@ -11,30 +11,32 @@ const MONGO_URI = process.env.MONGO_URI;
 // Middleware
 app.use(bodyParser.json());
 
-// Mongoose Schemas
+// ✅ Main Data Schema
 const dataSchema = new mongoose.Schema({
-  name: { type: Number, required: true },     // Device ID (e.g., 1011)
-  distance: { type: Number, required: true }, // Distance value
-  time: { type: String, required: true },     // Format: "HH:mm:ss"
-  date: { type: String, required: true },     // Format: "YYYY-MM-DD"
+  name: { type: Number, required: true },
+  distance: { type: Number, required: true },
+  time: { type: String, required: true },  // format: HH:mm:ss
+  date: { type: String, required: true }   // format: YYYY-MM-DD
 });
 
+const Data = mongoose.model('Data', dataSchema);
+
+// ✅ FilteredDistance Schema (one document per entry)
 const filteredDistanceSchema = new mongoose.Schema({
   name: { type: Number, required: true },
   distance: { type: Number, required: true },
   time: { type: String, required: true },
-  date: { type: String, required: true },
+  date: { type: String, required: true }
 });
 
-const Data = mongoose.model('Data', dataSchema);
 const FilteredDistance = mongoose.model('FilteredDistance', filteredDistanceSchema);
 
-// Routes
+// ✅ Root route
 app.get('/', (req, res) => {
   res.send('API is working!');
 });
 
-// ✅ Add data
+// ✅ POST data
 app.post('/api/data', async (req, res) => {
   try {
     const { name, distance, time, date } = req.body;
@@ -43,27 +45,28 @@ app.post('/api/data', async (req, res) => {
       return res.status(400).json({ error: 'All fields are required.' });
     }
 
+    // Save to main Data collection
     const newData = new Data({ name, distance, time, date });
     await newData.save();
 
-    // Save to FilteredDistance only if within 10 seconds of last entry
+    // Check if entry should go into FilteredDistance (10s rule)
     const lastEntry = await FilteredDistance.findOne({ name }).sort({ date: -1, time: -1 });
 
-    let shouldSaveToFiltered = false;
+    let shouldSave = false;
 
     if (!lastEntry) {
-      shouldSaveToFiltered = true;
+      shouldSave = true;
     } else {
-      const lastTimestamp = new Date(`${lastEntry.date}T${lastEntry.time}`);
-      const currentTimestamp = new Date(`${date}T${time}`);
-      const diffSeconds = (currentTimestamp - lastTimestamp) / 1000;
+      const lastTime = new Date(`${lastEntry.date}T${lastEntry.time}`);
+      const currentTime = new Date(`${date}T${time}`);
+      const diffInSeconds = (currentTime - lastTime) / 1000;
 
-      if (diffSeconds <= 10) {
-        shouldSaveToFiltered = true;
+      if (diffInSeconds <= 10) {
+        shouldSave = true;
       }
     }
 
-    if (shouldSaveToFiltered) {
+    if (shouldSave) {
       const filtered = new FilteredDistance({ name, distance, time, date });
       await filtered.save();
     }
@@ -75,7 +78,7 @@ app.post('/api/data', async (req, res) => {
   }
 });
 
-// ✅ Get all full data
+// ✅ GET all data
 app.get('/api/data', async (req, res) => {
   try {
     const allData = await Data.find().sort({ date: -1, time: -1 });
@@ -86,19 +89,19 @@ app.get('/api/data', async (req, res) => {
   }
 });
 
-// ✅ Get latest distances per device (ONLY distances, sorted by name)
+// ✅ GET latest distance per device (from full data)
 app.get('/api/data/distances', async (req, res) => {
   try {
     const deviceNames = await Data.distinct('name');
 
     const latestEntries = await Promise.all(
       deviceNames.map(async (deviceName) => {
-        return await Data.findOne({ name: deviceName })
-          .sort({ date: -1, time: -1 });
+        return await Data.findOne({ name: deviceName }).sort({ date: -1, time: -1 });
       })
     );
 
     const sortedDistances = latestEntries
+      .filter(entry => entry) // remove nulls if any
       .sort((a, b) => a.name - b.name)
       .map(entry => entry.distance);
 
@@ -109,22 +112,22 @@ app.get('/api/data/distances', async (req, res) => {
   }
 });
 
-// ✅ Get only distances saved under 10-sec rule
+// ✅ GET only distances from FilteredDistance
 app.get('/api/data/distances/filtered', async (req, res) => {
   try {
     const filteredData = await FilteredDistance.find();
-    const distances = filteredData.map(item => item.distance);
-    res.json(distances);
+    const distances = filteredData.map(entry => entry.distance);
+    res.json(distances); // Output: [56, 78, 73]
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error.' });
   }
 });
 
-// MongoDB Connection
+// ✅ MongoDB Connection
 mongoose.connect(MONGO_URI, {
   useNewUrlParser: true,
-  useUnifiedTopology: true,
+  useUnifiedTopology: true
 })
   .then(() => {
     console.log('✅ MongoDB connected');
